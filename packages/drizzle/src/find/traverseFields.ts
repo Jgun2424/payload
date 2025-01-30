@@ -13,6 +13,7 @@ import { getTableAlias } from '../queries/getTableAlias.js'
 import { getNameFromDrizzleTable } from '../utilities/getNameFromDrizzleTable.js'
 import { jsonAggBuildObject } from '../utilities/json.js'
 import { rawConstraint } from '../utilities/rawConstraint.js'
+import { buildCollectionJoinQuery } from './buildCollectionJoinQuery.js'
 import { chainMethods } from './chainMethods.js'
 
 type TraverseFieldArgs = {
@@ -350,6 +351,16 @@ export const traverseFields = ({
         if (limit !== 0) {
           // get an additional document and slice it later to determine if there is a next page
           limit += 1
+        }
+
+        if (Array.isArray(field.collection)) {
+          for (const collection of field.collection) {
+            buildCollectionJoinQuery({
+              adapter,
+              collection,
+            })
+          }
+        } else {
         }
 
         const fields = adapter.payload.collections[field.collection].config.flattenedFields
