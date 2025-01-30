@@ -1,30 +1,47 @@
-import type { FlattenedField, FlattenedJoinField, JoinField, Where } from 'payload'
+import type { SQL } from 'drizzle-orm'
+import type { LibSQLDatabase } from 'drizzle-orm/libsql'
+import type { FlattenedJoinField, Sort, Where } from 'payload'
 
+import { sql } from 'drizzle-orm'
 import toSnakeCase from 'to-snake-case'
 
-import type { BuildQueryJoinAliases, DrizzleAdapter } from '../types.js'
+import type { BuildQueryJoinAliases, ChainedMethods, DrizzleAdapter } from '../types.js'
 
+import buildQuery from '../queries/buildQuery.js'
+import { getTableAlias } from '../queries/getTableAlias.js'
+import { getNameFromDrizzleTable } from '../utilities/getNameFromDrizzleTable.js'
+import { jsonAggBuildObject } from '../utilities/json.js'
 import { rawConstraint } from '../utilities/rawConstraint.js'
+import { chainMethods } from './chainMethods.js'
 
 export const buildCollectionJoinQuery = ({
   adapter,
   collection,
   currentTableName,
   field,
+  limit,
+  locale,
   parentCollection,
+  path,
+  sort,
   versions,
+  where,
 }: {
   adapter: DrizzleAdapter
   collection: string
   currentTableName: string
   field: FlattenedJoinField
+  limit?: number
+  locale?: string
   parentCollection: string
-  rootCollection: string
+  path: string
+  sort?: Sort
   versions?: boolean
-}) => {
+  where?: Where
+}): SQL.Aliased => {
   const fields = adapter.payload.collections[collection].config.flattenedFields
 
-  const joinCollectionTableName = adapter.tableNameMap.get(toSnakeCase(field.collection))
+  const joinCollectionTableName = adapter.tableNameMap.get(toSnakeCase(collection))
 
   const joins: BuildQueryJoinAliases = []
 
@@ -119,7 +136,7 @@ export const buildCollectionJoinQuery = ({
       .orderBy(() => orderBy.map(({ column, order }) => order(column))),
   }).as(subQueryAlias)
 
-  currentArgs.extras[columnName] = sql`${db
+  return sql`${db
     .select({
       result: jsonAggBuildObject(adapter, {
         id: sql.raw(`"${subQueryAlias}".id`),
