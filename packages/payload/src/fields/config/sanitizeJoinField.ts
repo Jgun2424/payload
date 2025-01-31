@@ -23,19 +23,19 @@ export const sanitizeJoinField = ({
   if (typeof field.maxDepth === 'undefined') {
     field.maxDepth = 1
   }
-  const join: SanitizedJoin = {
+  let join: SanitizedJoin = {
     field,
     joinPath: `${joinPath ? joinPath + '.' : ''}${field.name}`,
     targetField: undefined,
   }
 
   if (Array.isArray(field.collection)) {
-    field.sanitizedMany = []
     for (const collection of field.collection) {
       const sanitizedField = {
         ...field,
         collection,
-      }
+      } as FlattenedJoinField
+
       sanitizeJoinField({
         config,
         field: sanitizedField,
@@ -43,8 +43,15 @@ export const sanitizeJoinField = ({
         joins,
       })
 
-      field.sanitizedMany.push(sanitizedField)
+      join = sanitizedField
     }
+
+    for (const k in join) {
+      if (k !== 'collection') {
+        field[k] = join[k]
+      }
+    }
+
     return
   }
 

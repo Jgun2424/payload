@@ -1,8 +1,6 @@
-import type { SQL } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import type { FlattenedJoinField, Sort, Where } from 'payload'
 
-import { sql } from 'drizzle-orm'
 import toSnakeCase from 'to-snake-case'
 
 import type { BuildQueryJoinAliases, ChainedMethods, DrizzleAdapter } from '../types.js'
@@ -10,7 +8,6 @@ import type { BuildQueryJoinAliases, ChainedMethods, DrizzleAdapter } from '../t
 import buildQuery from '../queries/buildQuery.js'
 import { getTableAlias } from '../queries/getTableAlias.js'
 import { getNameFromDrizzleTable } from '../utilities/getNameFromDrizzleTable.js'
-import { jsonAggBuildObject } from '../utilities/json.js'
 import { rawConstraint } from '../utilities/rawConstraint.js'
 import { chainMethods } from './chainMethods.js'
 
@@ -18,6 +15,7 @@ export const buildCollectionJoinQuery = ({
   adapter,
   collection,
   currentTableName,
+  extraSelect,
   field,
   limit,
   locale,
@@ -30,6 +28,7 @@ export const buildCollectionJoinQuery = ({
   adapter: DrizzleAdapter
   collection: string
   currentTableName: string
+  extraSelect?: any
   field: FlattenedJoinField
   limit?: number
   locale?: string
@@ -38,7 +37,7 @@ export const buildCollectionJoinQuery = ({
   sort?: Sort
   versions?: boolean
   where?: Where
-}): SQL.Aliased => {
+}) => {
   const fields = adapter.payload.collections[collection].config.flattenedFields
 
   const joinCollectionTableName = adapter.tableNameMap.get(toSnakeCase(collection))
@@ -127,6 +126,12 @@ export const buildCollectionJoinQuery = ({
     }
   }
 
+  if (extraSelect) {
+    for (const k in extraSelect) {
+      selectFields[k] = extraSelect[k]
+    }
+  }
+
   const subQuery = chainMethods({
     methods: chainedMethods,
     query: db
@@ -136,14 +141,5 @@ export const buildCollectionJoinQuery = ({
       .orderBy(() => orderBy.map(({ column, order }) => order(column))),
   }).as(subQueryAlias)
 
-  return sql`${db
-    .select({
-      result: jsonAggBuildObject(adapter, {
-        id: sql.raw(`"${subQueryAlias}".id`),
-        ...(selectFields._locale && {
-          locale: sql.raw(`"${subQueryAlias}".${selectFields._locale.name}`),
-        }),
-      }),
-    })
-    .from(sql`${subQuery}`)}`.as(subQueryAlias)
+  return { selectFields, subQuery, subQueryAlias }
 }

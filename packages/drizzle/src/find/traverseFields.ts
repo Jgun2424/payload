@@ -1,7 +1,10 @@
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
+import type { SQLiteSelectBase } from 'drizzle-orm/sqlite-core'
 import type { FlattenedField, JoinQuery, SelectMode, SelectType, Where } from 'payload'
 
+import { randomUUID } from 'crypto'
 import { sql } from 'drizzle-orm'
+import { unionAll } from 'drizzle-orm/pg-core'
 import { fieldIsVirtual } from 'payload/shared'
 import toSnakeCase from 'to-snake-case'
 
@@ -353,12 +356,55 @@ export const traverseFields = ({
           limit += 1
         }
 
+        const columnName = `${path.replaceAll('.', '_')}${field.name}`
+
+        const db = adapter.drizzle as LibSQLDatabase
+
         if (Array.isArray(field.collection)) {
-          throw new Error('Not implemented')
+          let currentQuery: null | SQLiteSelectBase<any, any, any, any> = null
+
+          const queries = field.collection.map((collection) =>
+            buildCollectionJoinQuery({
+              adapter,
+              collection,
+              currentTableName,
+              field,
+              limit,
+              locale,
+              parentCollection: collectionSlug,
+              path,
+              versions,
+              where,
+            }),
+          )
+
+          for (const collection of field.collection) {
+            const { selectFields, subQuery, subQueryAlias } = buildCollectionJoinQuery({
+              adapter,
+              collection,
+              currentTableName,
+              extraSelect: { collectionSlug: collection },
+              field,
+              limit,
+              locale,
+              parentCollection: collectionSlug,
+              path,
+              versions,
+              where,
+            })
+
+            if (currentQuery === null) {
+              currentQuery = query
+            } else {
+              currentQuery = currentQuery.union(query)
+            }
+          }
+
+          currentArgs.extras[columnName] = sql`${currentQuery}`.as(randomUUID())
         } else {
           const columnName = `${path.replaceAll('.', '_')}${field.name}`
 
-          currentArgs.extras[columnName] = buildCollectionJoinQuery({
+          const { selectFields, subQuery, subQueryAlias } = buildCollectionJoinQuery({
             adapter,
             collection: field.collection,
             currentTableName,
@@ -371,6 +417,17 @@ export const traverseFields = ({
             versions,
             where,
           })
+
+          currentArgs.extras[columnName] = db
+            .select({
+              result: jsonAggBuildObject(adapter, {
+                id: sql.raw(`"${subQueryAlias}".id`),
+                ...(selectFields._locale && {
+                  locale: sql.raw(`"${subQueryAlias}".${selectFields._locale.name}`),
+                }),
+              }),
+            })
+            .from(sql`${subQuery}`)
         }
 
         break

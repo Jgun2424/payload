@@ -1027,9 +1027,15 @@ describe('Joins Field', () => {
 
   describe('Array of collection', () => {
     it('should join across multiple collections', async () => {
-      let parent = await payload.create({ collection: 'multiple-collections-parents', data: {} })
+      let parent = await payload.create({
+        collection: 'multiple-collections-parents',
+        depth: 0,
+        data: {},
+      })
+
       const child_1 = await payload.create({
         collection: 'multiple-collections-1',
+        depth: 0,
         data: {
           parent,
         },
@@ -1037,6 +1043,7 @@ describe('Joins Field', () => {
 
       const child_2 = await payload.create({
         collection: 'multiple-collections-2',
+        depth: 0,
         data: {
           parent,
         },
